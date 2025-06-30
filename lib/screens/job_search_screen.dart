@@ -14,7 +14,6 @@ class JobSearchScreen extends StatefulWidget {
 
 class _JobSearchScreenState extends State<JobSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
-  final TextEditingController _minSalaryController = TextEditingController(text: '15000');
   final DaangnApiService _apiService = DaangnApiService();
   
   Set<JobResult> _searchResults = {};
@@ -28,6 +27,10 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
   
   // 필터 옵션
   bool _showOnlyDaangnJobs = true;
+  int _selectedMinSalary = 0; // 기본값 0원
+  
+  // 최소 금액 옵션
+  static const List<int> _minSalaryOptions = [0, 10000, 15000, 20000];
 
   @override
   void initState() {
@@ -47,7 +50,6 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
   @override
   void dispose() {
     _searchController.dispose();
-    _minSalaryController.dispose();
     super.dispose();
   }
 
@@ -131,10 +133,60 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
         });
         return;
       }
-      final minSalary = int.tryParse(_minSalaryController.text.replaceAll(',', ''));
+      final minSalary = _selectedMinSalary;
       if (_selectedSubRegion!.code == 'all') {
         // 전체 동 검색
-        if (_selectedGu != null && _selectedGu!.code != 'all') {
+        if (_selectedRegion!.code == 'all') {
+          // 전체 지역 검색 (모든 시/도의 모든 동을 검색)
+          for (final region in RegionData.regions) {
+            if (region.code == 'all') continue; // 전체 지역 옵션은 건너뛰기
+            
+            if (region.gus != null) {
+              // 3단계 구조 (시/도 -> 구 -> 동)
+              for (final gu in region.gus!) {
+                if (gu.code == 'all') continue; // 전체 구 옵션은 건너뛰기
+                for (final dong in gu.dongs) {
+                  if (dong.code == 'all') continue;
+                  var results = await _apiService.searchJobs(
+                    _searchController.text.trim(),
+                    dong,
+                    showOnlyDaangnJobs: _showOnlyDaangnJobs,
+                  );
+                  // 최소금액 필터 적용
+                  if (minSalary != null) {
+                    results = results.where((job) {
+                      final salary = parseKoreanMoney(job.salary);
+                      return salary != null && salary >= minSalary;
+                    }).toList();
+                  }
+                  setState(() {
+                    _searchResults.addAll(results);
+                  });
+                }
+              }
+            } else if (region.subRegions != null) {
+              // 2단계 구조 (시/도 -> 동)
+              for (final sub in region.subRegions!) {
+                if (sub.code == 'all') continue;
+                var results = await _apiService.searchJobs(
+                  _searchController.text.trim(),
+                  sub,
+                  showOnlyDaangnJobs: _showOnlyDaangnJobs,
+                );
+                // 최소금액 필터 적용
+                if (minSalary != null) {
+                  results = results.where((job) {
+                    final salary = parseKoreanMoney(job.salary);
+                    return salary != null && salary >= minSalary;
+                  }).toList();
+                }
+                setState(() {
+                  _searchResults.addAll(results);
+                });
+              }
+            }
+          }
+        } else if (_selectedGu != null && _selectedGu!.code != 'all') {
           // 특정 구의 전체 동 검색
           for (final dong in _selectedGu!.dongs) {
             if (dong.code == 'all') continue;
@@ -154,8 +206,32 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
               _searchResults.addAll(results);
             });
           }
+        } else if (_selectedGu != null && _selectedGu!.code == 'all') {
+          // 전체 구 검색 (시/도의 모든 구에 대해 검색)
+          final parent = _selectedRegion!;
+          for (final gu in parent.gus ?? []) {
+            if (gu.code == 'all') continue; // 전체 구 옵션은 건너뛰기
+            for (final dong in gu.dongs) {
+              if (dong.code == 'all') continue;
+              var results = await _apiService.searchJobs(
+                _searchController.text.trim(),
+                dong,
+                showOnlyDaangnJobs: _showOnlyDaangnJobs,
+              );
+              // 최소금액 필터 적용
+              if (minSalary != null) {
+                results = results.where((job) {
+                  final salary = parseKoreanMoney(job.salary);
+                  return salary != null && salary >= minSalary;
+                }).toList();
+              }
+              setState(() {
+                _searchResults.addAll(results);
+              });
+            }
+          }
         } else {
-          // 시/도 전체 동 검색
+          // 시/도 전체 동 검색 (기존 2단계 구조용)
           final parent = _selectedRegion!;
           for (final sub in parent.subRegions ?? []) {
             if (sub.code == 'all') continue;
@@ -438,22 +514,31 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                 Row(
                   children: [
                     const Text(
-                      '최소 금액(원):',
+                      '최소 금액:',
                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: TextField(
-                        controller: _minSalaryController,
-                        keyboardType: TextInputType.number,
+                      child: DropdownButtonFormField<int>(
+                        value: _selectedMinSalary,
                         decoration: InputDecoration(
-                          hintText: '예: 15000',
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                         ),
+                        items: _minSalaryOptions.map((salary) {
+                          return DropdownMenuItem<int>(
+                            value: salary,
+                            child: Text(salary == 0 ? '0원 (전체)' : '${salary.toStringAsFixed(0)}원'),
+                          );
+                        }).toList(),
+                        onChanged: (value) {
+                          setState(() {
+                            _selectedMinSalary = value ?? 0;
+                          });
+                        },
                       ),
                     ),
                   ],
