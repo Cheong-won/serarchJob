@@ -147,57 +147,51 @@ class DaangnApiService {
             final companyLocationElement = linkElement.querySelector('._1pwsqmm0');
             if (companyLocationElement != null) {
               final spans = companyLocationElement.querySelectorAll('span');
-              print('회사/위치 요소에서 찾은 span 개수: ${spans.length}');
-              
+              print('회사/위치 요소에서 찾은 span 개수: \\${spans.length}');
               if (spans.isNotEmpty) {
+                // 회사명: 첫 번째 span
                 company = _extractText(spans.first)?.trim() ?? '';
-                print('추출된 회사명: "$company"');
-              }
-              
-              // 위치 정보 찾기 (_1pwsqmmd 클래스의 span)
-              final locationElement = companyLocationElement.querySelector('._1pwsqmmd span');
-              if (locationElement != null) {
-                location = _extractText(locationElement)?.trim() ?? '';
-                print('추출된 위치: "$location"');
+                print('추출된 회사명: "\\$company"');
+                // 동정보: 두 번째 _1pwsqmmd span의 두 번째 자식 span
+                final dongSpans = companyLocationElement.querySelectorAll('span._1pwsqmmd');
+                if (dongSpans.isNotEmpty) {
+                  final innerSpans = dongSpans[0].querySelectorAll('span');
+                  if (innerSpans.length > 1) {
+                    location = _extractText(innerSpans[1])?.trim() ?? '';
+                    print('동정보(location): "\\$location"');
+                  }
+                }
               }
             }
             
-            // 급여 정보 추출 (두 번째 _1pwsqmm0 클래스의 첫 번째 span)
+            // 급여 및 근무 일정 추출 (두 번째 _1pwsqmm0 클래스)
             String salary = '';
-            print('\n--- 급여 정보 추출 ---');
+            String workSchedule = '';
+            print('\n--- 급여/근무 일정 추출 ---');
             
             final salaryElements = linkElement.querySelectorAll('._1pwsqmm0');
             print('급여 관련 요소 개수: ${salaryElements.length}');
             
             if (salaryElements.length > 1) {
-              final salaryElement = salaryElements[1].querySelector('span');
-              if (salaryElement != null) {
-                salary = _extractText(salaryElement)?.trim() ?? '';
+              final spans = salaryElements[1].querySelectorAll('span');
+              if (spans.isNotEmpty) {
+                // 급여: 첫 번째 span
+                salary = _extractText(spans.first)?.trim() ?? '';
                 print('추출된 급여: "$salary"');
+                // 근무 일정: 두 번째, 세 번째 _1pwsqmmd span의 두 번째 자식 span
+                final scheduleSpans = salaryElements[1].querySelectorAll('span._1pwsqmmd');
+                if (scheduleSpans.length >= 2) {
+                  final daySpan = scheduleSpans[0].querySelectorAll('span');
+                  final timeSpan = scheduleSpans[1].querySelectorAll('span');
+                  final day = (daySpan.length > 1) ? _extractText(daySpan[1])?.trim() ?? '' : '';
+                  final time = (timeSpan.length > 1) ? _extractText(timeSpan[1])?.trim() ?? '' : '';
+                  workSchedule = [day, time].where((t) => t.isNotEmpty).join(' ');
+                  print('근무 일정: "$workSchedule"');
+                }
               }
             }
             
           
-            
-            // 근무 일정 추출 (두 번째 _1pwsqmm0 클래스의 _1pwsqmmd span들)
-            String workSchedule = '';
-            String workPeriod = '';
-            print('\n--- 근무 일정 추출 ---');
-            
-            if (salaryElements.length > 1) {
-              final scheduleElements = salaryElements[1].querySelectorAll('._1pwsqmmd span');
-              print('근무 일정 관련 span 개수: ${scheduleElements.length}');
-              
-              if (scheduleElements.length >= 2) {
-                workPeriod = _extractText(scheduleElements[1])?.trim() ?? '';
-                print('추출된 근무 기간: "$workPeriod"');
-              }
-              if (scheduleElements.length >= 3) {
-                workSchedule = _extractText(scheduleElements[2])?.trim() ?? '';
-                print('추출된 근무 일정: "$workSchedule"');
-              }
-            }
-      
             
             // 결과가 유효한 경우에만 추가
             if (title.isNotEmpty) {
@@ -225,7 +219,7 @@ class DaangnApiService {
                   location: location,
                   salary: salary,
                   workSchedule: workSchedule,
-                  workPeriod: workPeriod,
+                  workPeriod: '',
                   description: description,
                   url: url,
                   postedDate: DateTime.now(), // 실제로는 HTML에서 추출

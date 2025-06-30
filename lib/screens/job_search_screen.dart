@@ -14,9 +14,10 @@ class JobSearchScreen extends StatefulWidget {
 
 class _JobSearchScreenState extends State<JobSearchScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final TextEditingController _minSalaryController = TextEditingController(text: '15000');
   final DaangnApiService _apiService = DaangnApiService();
   
-  List<JobResult> _searchResults = [];
+  Set<JobResult> _searchResults = {};
   bool _isLoading = false;
   String? _errorMessage;
   
@@ -39,6 +40,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
   @override
   void dispose() {
     _searchController.dispose();
+    _minSalaryController.dispose();
     super.dispose();
   }
 
@@ -55,11 +57,39 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
     });
   }
 
+  int? parseKoreanMoney(String text) {
+    // 1. '1만 5,000원' → '1만5000'
+    String cleaned = text.replaceAll(' ', '');
+    int total = 0;
+
+    // 만 단위 처리
+    final manMatch = RegExp(r'(\d+)만').firstMatch(cleaned);
+    if (manMatch != null) {
+      total += int.parse(manMatch.group(1)!) * 10000;
+      cleaned = cleaned.replaceFirst(RegExp(r'(\d+)만'), '');
+    }
+
+    // 천 단위 처리 (옵션)
+    final chunMatch = RegExp(r'(\d+)천').firstMatch(cleaned);
+    if (chunMatch != null) {
+      total += int.parse(chunMatch.group(1)!) * 1000;
+      cleaned = cleaned.replaceFirst(RegExp(r'(\d+)천'), '');
+    }
+
+    // 나머지 숫자
+    final numMatch = RegExp(r'(\d{1,3}(,\d{3})*)').firstMatch(cleaned);
+    if (numMatch != null) {
+      total += int.parse(numMatch.group(1)!.replaceAll(',', ''));
+    }
+
+    return total > 0 ? total : null;
+  }
+
   Future<void> _performSearch() async {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
-      _searchResults = [];
+      _searchResults = {};
     });
     try {
       if (_selectedRegion == null || _selectedSubRegion == null) {
@@ -69,26 +99,26 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
         });
         return;
       }
+      final minSalary = int.tryParse(_minSalaryController.text.replaceAll(',', ''));
       if (_selectedSubRegion!.code == 'all') {
         // 전체 동 검색: 동별로 바로바로 추가
         final parent = _selectedRegion!;
         for (final sub in parent.subRegions) {
           if (sub.code == 'all') continue;
-          final results = await _apiService.searchJobs(
+          var results = await _apiService.searchJobs(
             _searchController.text.trim(),
             sub,
             showOnlyDaangnJobs: _showOnlyDaangnJobs,
           );
+          // 최소금액 필터 적용
+          if (minSalary != null) {
+            results = results.where((job) {
+              final salary = parseKoreanMoney(job.salary);
+              return salary != null && salary >= minSalary;
+            }).toList();
+          }
           setState(() {
-            for (final job in results) {
-              final isDuplicate = _searchResults.any((e) =>
-                e.url == job.url ||
-                (e.title == job.title && e.company == job.company && e.salary == job.salary)
-              );
-              if (!isDuplicate) {
-                _searchResults.add(job);
-              }
-            }
+            _searchResults.addAll(results);
           });
         }
         setState(() {
@@ -96,13 +126,20 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
         });
       } else {
         // 단일 동 검색
-        final results = await _apiService.searchJobs(
+        var results = await _apiService.searchJobs(
           _searchController.text.trim(),
           _selectedSubRegion!,
           showOnlyDaangnJobs: _showOnlyDaangnJobs,
         );
+        // 최소금액 필터 적용
+        if (minSalary != null) {
+          results = results.where((job) {
+            final salary = parseKoreanMoney(job.salary);
+            return salary != null && salary >= minSalary;
+          }).toList();
+        }
         setState(() {
-          _searchResults = results;
+          _searchResults.addAll(results);
           _isLoading = false;
         });
       }
@@ -170,146 +207,130 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
       ),
       body: Column(
         children: [
-          // 지역 선택 영역
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blue.shade200),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  '지역 선택',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.blue,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                
-                // 시/도 선택 드롭다운
-                DropdownButtonFormField<Region>(
-                  value: _selectedRegion,
-                  decoration: InputDecoration(
-                    labelText: '시/도',
-                    hintText: '시/도를 선택하세요',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    prefixIcon: const Icon(Icons.location_city),
-                  ),
-                  items: RegionData.regions.map((region) {
-                    return DropdownMenuItem<Region>(
-                      value: region,
-                      child: Text(region.name),
-                    );
-                  }).toList(),
-                  onChanged: (Region? newValue) {
-                    setState(() {
-                      _selectedRegion = newValue;
-                      // 시/도 변경 시 첫 번째 동을 기본 선택
-                      _selectedSubRegion = newValue?.subRegions.first;
-                    });
-                  },
-                ),
-                
-                const SizedBox(height: 12),
-                
-                // 동 선택 드롭다운
-                DropdownButtonFormField<SubRegion>(
-                  value: _selectedSubRegion,
-                  decoration: InputDecoration(
-                    labelText: '동 선택',
-                    hintText: '검색할 동을 선택하거나 "선택 안함"으로 전체 동 검색',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    prefixIcon: const Icon(Icons.location_on),
-                  ),
-                  items: _selectedRegion?.subRegions.map((subRegion) {
-                    return DropdownMenuItem<SubRegion>(
-                      value: subRegion,
-                      child: Text(subRegion.name),
-                    );
-                  }).toList() ?? [],
-                  onChanged: (SubRegion? newValue) {
-                    setState(() {
-                      _selectedSubRegion = newValue;
-                    });
-                  },
-                ),
-              ],
-            ),
-          ),
-          
-          // 검색 입력 영역
+          // 검색/필터 전체 영역을 ExpansionTile로 감싼다
           Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: ExpansionTile(
+              title: const Text(
+                '검색 및 필터 옵션',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
+              ),
+              initiallyExpanded: true,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: '검색어를 입력하세요 (선택사항, 예: 엑셀, 서빙, 주방보조...)',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
+                // 지역 선택 영역
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '지역 선택',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue,
+                        ),
                       ),
-                      prefixIcon: const Icon(Icons.search),
+                      const SizedBox(height: 12),
+                      // 시/도 선택 드롭다운
+                      DropdownButtonFormField<Region>(
+                        value: _selectedRegion,
+                        decoration: InputDecoration(
+                          labelText: '시/도',
+                          hintText: '시/도를 선택하세요',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          prefixIcon: const Icon(Icons.location_city),
+                        ),
+                        items: RegionData.regions.map((region) {
+                          return DropdownMenuItem<Region>(
+                            value: region,
+                            child: Text(region.name),
+                          );
+                        }).toList(),
+                        onChanged: (Region? newValue) {
+                          setState(() {
+                            _selectedRegion = newValue;
+                            _selectedSubRegion = newValue?.subRegions.first;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      // 동 선택 드롭다운
+                      DropdownButtonFormField<SubRegion>(
+                        value: _selectedSubRegion,
+                        decoration: InputDecoration(
+                          labelText: '동 선택',
+                          hintText: '검색할 동을 선택하거나 "선택 안함"으로 전체 동 검색',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          prefixIcon: const Icon(Icons.location_on),
+                        ),
+                        items: _selectedRegion?.subRegions.map((subRegion) {
+                          return DropdownMenuItem<SubRegion>(
+                            value: subRegion,
+                            child: Text(subRegion.name),
+                          );
+                        }).toList() ?? [],
+                        onChanged: (SubRegion? newValue) {
+                          setState(() {
+                            _selectedSubRegion = newValue;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // 검색 입력 영역
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: '검색어를 입력하세요 (선택사항, 예: 엑셀, 서빙, 주방보조...)',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          prefixIcon: const Icon(Icons.search),
+                        ),
+                        onSubmitted: (_) => _performSearch(),
+                      ),
                     ),
-                    onSubmitted: (_) => _performSearch(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _performSearch,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _performSearch,
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('검색'),
                     ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('검색'),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          
-          // 필터 옵션
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.symmetric(horizontal: 16),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade50,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.orange.shade200),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.filter_list, color: Colors.orange.shade700),
-                const SizedBox(width: 8),
-                const Text(
-                  '필터 옵션',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.orange,
-                  ),
-                ),
-                const Spacer(),
+                const SizedBox(height: 12),
+                // 필터 옵션
                 Row(
                   children: [
                     const Text(
@@ -331,6 +352,31 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Text(
+                      '최소 금액(원):',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _minSalaryController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          hintText: '예: 15000',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
               ],
             ),
           ),
@@ -378,7 +424,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                         padding: const EdgeInsets.all(16),
                         itemCount: _searchResults.length,
                         itemBuilder: (context, index) {
-                          final result = _searchResults[index];
+                          final result = _searchResults.toList()[index];
                           return Card(
                             margin: const EdgeInsets.only(bottom: 12),
                             child: InkWell(

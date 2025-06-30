@@ -55,4 +55,14 @@ class JobResult {
   String toString() {
     return 'JobResult(title: $title, company: $company, location: $location)';
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is JobResult &&
+          runtimeType == other.runtimeType &&
+          title == other.title;
+
+  @override
+  int get hashCode => title.hashCode;
 }
