@@ -1,0 +1,273 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:html/parser.dart' as html;
+import 'package:html/dom.dart';
+import '../models/job_result.dart';
+import '../models/region.dart';
+
+class DaangnApiService {
+  static const String baseUrl = 'https://www.daangn.com';
+  
+  Future<List<JobResult>> searchJobs(String query, SubRegion region, {Region? parentRegion, bool showOnlyDaangnJobs = false}) async {
+    try {
+      // "선택 안함"(전체 동)일 때
+      if (region.code == 'all' && parentRegion != null) {
+        List<JobResult> allResults = [];
+        Set<String> seenTitles = {};
+        for (final sub in parentRegion.subRegions) {
+          if (sub.code == 'all') continue; // "선택 안함"은 제외
+          print('하위 지역 검색: ${sub.name} (${sub.code})');
+          final results = await searchJobs(query, sub, showOnlyDaangnJobs: showOnlyDaangnJobs);
+          print('${sub.name}에서 ${results.length}개 결과 발견');
+          
+          for (final job in results) {
+            if (!seenTitles.contains(job.title)) {
+              allResults.add(job);
+              seenTitles.add(job.title);
+            }
+          }
+        }
+        
+        print('전체 동 검색 완료 - 총 ${allResults.length}개 결과 (중복 제거 후)');
+        return allResults;
+      }
+
+      // URL 인코딩
+      final encodedQuery = Uri.encodeComponent(query);
+      final regionParam = '${region.name}-${region.code}';
+      final encodedRegion = Uri.encodeComponent(regionParam);
+      final url = '$baseUrl/kr/jobs/?in=$encodedRegion&search=$encodedQuery';
+      
+      print('API 호출 URL: $url');
+      print('인코딩된 검색어: $encodedQuery');
+      print('인코딩된 지역: $encodedRegion');
+      
+      final startTime = DateTime.now();
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
+        },
+      );
+      
+      final endTime = DateTime.now();
+      final duration = endTime.difference(startTime);
+      
+      print('API 응답 시간: ${duration.inMilliseconds}ms');
+      print('응답 상태 코드: ${response.statusCode}');
+      print('응답 헤더: ${response.headers}');
+      
+      if (response.statusCode == 200) {
+        final body = utf8.decode(response.bodyBytes);
+        print('응답 본문 크기: ${body.length} 문자');
+        print('응답 본문 미리보기: ${body.substring(0, body.length > 500 ? 500 : body.length)}...');
+        
+        final results = _parseJobResults(body, query, showOnlyDaangnJobs);
+        print('=== API 검색 완료 ===');
+        print('최종 결과 개수: ${results.length}');
+        return results;
+      } else {
+        print('❌ API 요청 실패: ${response.statusCode}');
+        print('응답 본문: ${response.body}');
+        throw Exception('API 요청 실패: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ API 호출 오류: $e');
+      print('오류 스택 트레이스: ${StackTrace.current}');
+      throw Exception('검색 중 오류가 발생했습니다: $e');
+    }
+  }
+
+  List<JobResult> _parseJobResults(String htmlContent, String query, bool showOnlyDaangnJobs) {
+    try {
+      print('=== HTML 파싱 시작 ===');
+      print('검색어: "$query"');
+      print('이웃알바만 보기: $showOnlyDaangnJobs');
+      
+      final document = html.parse(htmlContent);
+      final List<JobResult> results = [];
+
+      // _11bsp580 클래스를 가진 div 요소들을 찾기
+      final jobContainers = document.querySelectorAll('div._11bsp580');
+      
+      print('찾은 job 컨테이너 개수: ${jobContainers.length}');
+      
+      if (jobContainers.isEmpty) {
+        print('⚠️ job 컨테이너를 찾을 수 없습니다. 다른 선택자를 시도합니다...');
+        
+      }
+      
+      for (int i = 0; i < jobContainers.length; i++) {
+        final container = jobContainers[i];
+        print('\n--- 컨테이너 ${i + 1} 파싱 시작 ---');
+        
+        // 각 컨테이너 안의 모든 a 태그 찾기
+        final linkElements = container.querySelectorAll('a');
+        print('컨테이너 ${i + 1}에서 찾은 a 태그 개수: ${linkElements.length}');
+        
+        if (linkElements.isEmpty) {
+          print('❌ a 태그를 찾을 수 없습니다');
+          continue;
+        }
+        
+        // 각 a 태그에서 정보 추출
+        for (int j = 0; j < linkElements.length; j++) {
+          final linkElement = linkElements[j];
+          print('\n--- a 태그 ${j + 1} 파싱 시작 ---');
+          
+          try {
+            // a 태그의 href 속성에서 URL 추출
+            final href = linkElement.attributes['href'] ?? '';
+            final url = (href.startsWith('http://') || href.startsWith('https://')) ? href : '$baseUrl$href';
+            print('URL: $url');
+            
+            // 제목 추출 - 다양한 방법 시도
+            String title = '';
+            print('\n--- 제목 추출 시도 ---');
+            
+            // 방법 1: abyzch1 클래스의 span
+            final titleElement1 = linkElement.querySelector('span[class*="abyzch1"]');
+            if (titleElement1 != null) {
+              title = _extractText(titleElement1)?.trim() ?? '';
+              print('방법 1 (abyzch1): "$title"');
+            }
+                    
+                    
+            
+            // 회사명과 위치 추출 (_1pwsqmm0 클래스의 첫 번째 span)
+            String company = '';
+            String location = '';
+            print('\n--- 회사명/위치 추출 ---');
+            
+            final companyLocationElement = linkElement.querySelector('._1pwsqmm0');
+            if (companyLocationElement != null) {
+              final spans = companyLocationElement.querySelectorAll('span');
+              print('회사/위치 요소에서 찾은 span 개수: ${spans.length}');
+              
+              if (spans.isNotEmpty) {
+                company = _extractText(spans.first)?.trim() ?? '';
+                print('추출된 회사명: "$company"');
+              }
+              
+              // 위치 정보 찾기 (_1pwsqmmd 클래스의 span)
+              final locationElement = companyLocationElement.querySelector('._1pwsqmmd span');
+              if (locationElement != null) {
+                location = _extractText(locationElement)?.trim() ?? '';
+                print('추출된 위치: "$location"');
+              }
+            }
+            
+            // 급여 정보 추출 (두 번째 _1pwsqmm0 클래스의 첫 번째 span)
+            String salary = '';
+            print('\n--- 급여 정보 추출 ---');
+            
+            final salaryElements = linkElement.querySelectorAll('._1pwsqmm0');
+            print('급여 관련 요소 개수: ${salaryElements.length}');
+            
+            if (salaryElements.length > 1) {
+              final salaryElement = salaryElements[1].querySelector('span');
+              if (salaryElement != null) {
+                salary = _extractText(salaryElement)?.trim() ?? '';
+                print('추출된 급여: "$salary"');
+              }
+            }
+            
+          
+            
+            // 근무 일정 추출 (두 번째 _1pwsqmm0 클래스의 _1pwsqmmd span들)
+            String workSchedule = '';
+            String workPeriod = '';
+            print('\n--- 근무 일정 추출 ---');
+            
+            if (salaryElements.length > 1) {
+              final scheduleElements = salaryElements[1].querySelectorAll('._1pwsqmmd span');
+              print('근무 일정 관련 span 개수: ${scheduleElements.length}');
+              
+              if (scheduleElements.length >= 2) {
+                workPeriod = _extractText(scheduleElements[1])?.trim() ?? '';
+                print('추출된 근무 기간: "$workPeriod"');
+              }
+              if (scheduleElements.length >= 3) {
+                workSchedule = _extractText(scheduleElements[2])?.trim() ?? '';
+                print('추출된 근무 일정: "$workSchedule"');
+              }
+            }
+      
+            
+            // 결과가 유효한 경우에만 추가
+            if (title.isNotEmpty) {
+              // 이웃알바만 보기 옵션이 활성화된 경우 필터링
+              bool shouldInclude = !showOnlyDaangnJobs || (showOnlyDaangnJobs && company == '이웃알바');
+              print('\n--- 필터링 ---');
+              print('필터링 조건: showOnlyDaangnJobs=$showOnlyDaangnJobs, company="$company", shouldInclude=$shouldInclude');
+              
+              if (shouldInclude) {
+                // 설명은 제목과 회사 정보를 조합
+                String description = '';
+                if (company.isNotEmpty) {
+                  description = '$company에서 모집하는 $title';
+                } else {
+                  description = title;
+                }
+                
+                if (location.isNotEmpty) {
+                  description += ' ($location)';
+                }
+                
+                results.add(JobResult(
+                  title: title,
+                  company: company,
+                  location: location,
+                  salary: salary,
+                  workSchedule: workSchedule,
+                  workPeriod: workPeriod,
+                  description: description,
+                  url: url,
+                  postedDate: DateTime.now(), // 실제로는 HTML에서 추출
+                ));
+                
+                print('✅ 결과 추가됨: $title - $company - $salary');
+              } else {
+                print('❌ 필터링으로 인해 제외됨');
+              }
+            } else {
+              print('❌ 제목이 비어있어 결과에서 제외됨');
+            }
+          } catch (e) {
+            print('❌ 개별 a 태그 파싱 오류: $e');
+            continue;
+          }
+        }
+      }
+
+      print('\n=== 파싱 완료 ===');
+      print('총 파싱된 결과 개수: ${results.length}');
+      return results;
+    } catch (e) {
+      print('❌ HTML 파싱 오류: $e');
+      throw Exception('HTML 파싱 중 오류가 발생했습니다: $e');
+    }
+  }
+
+  // HTML에서 텍스트 추출 (보조 함수)
+  String? _extractText(Element? element) {
+    if (element == null) return null;
+    
+    // 스크립트와 스타일 태그 제거
+    final scripts = element.querySelectorAll('script');
+    final styles = element.querySelectorAll('style');
+    for (var script in scripts) {
+      script.remove();
+    }
+    for (var style in styles) {
+      style.remove();
+    }
+    
+    return element.text?.trim();
+  }
+} 
