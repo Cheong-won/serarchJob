@@ -24,17 +24,24 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
   // 지역 선택 관련
   Region? _selectedRegion;
   SubRegion? _selectedSubRegion;
+  Gu? _selectedGu;
   
   // 필터 옵션
-  bool _showOnlyDaangnJobs = false;
+  bool _showOnlyDaangnJobs = true;
 
   @override
   void initState() {
     super.initState();
-    // 기본 지역 설정 (서울특별시)
     _selectedRegion = RegionData.regions.first;
-    // 기본 동 설정 (선택 안함)
-    _selectedSubRegion = _selectedRegion!.subRegions.first;
+    if (_selectedRegion!.gus != null && _selectedRegion!.gus!.isNotEmpty) {
+      final noneGu = Gu(name: '선택 안함 (전체 구)', code: 'all', dongs: [SubRegion(name: '선택 안함 (전체 동)', code: 'all')]);
+      final guList = [noneGu, ..._selectedRegion!.gus!];
+      _selectedGu = guList.firstWhere((g) => g.code == 'all');
+      _selectedSubRegion = noneGu.dongs.first;
+    } else {
+      _selectedGu = null;
+      _selectedSubRegion = _selectedRegion!.subRegions?.first;
+    }
   }
 
   @override
@@ -47,7 +54,28 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
   void _onRegionChanged(Region? region) {
     setState(() {
       _selectedRegion = region;
-      _selectedSubRegion = null;
+      if (region?.gus != null && region!.gus!.isNotEmpty) {
+        final noneGu = Gu(name: '선택 안함 (전체 구)', code: 'all', dongs: [SubRegion(name: '선택 안함 (전체 동)', code: 'all')]);
+        final guList = [noneGu, ...region.gus!];
+        _selectedGu = guList.firstWhere((g) => g.code == 'all');
+        _selectedSubRegion = noneGu.dongs.first;
+      } else {
+        _selectedGu = null;
+        _selectedSubRegion = region?.subRegions?.first;
+      }
+    });
+  }
+
+  void _onGuChanged(Gu? gu) {
+    setState(() {
+      _selectedGu = gu;
+      if (gu != null) {
+        final noneDong = SubRegion(name: '선택 안함 (전체 동)', code: 'all');
+        final dongList = [noneDong, ...gu.dongs.where((d) => d.code != 'all')];
+        _selectedSubRegion = dongList.firstWhere((d) => d.code == 'all');
+      } else {
+        _selectedSubRegion = null;
+      }
     });
   }
 
@@ -86,6 +114,10 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
   }
 
   Future<void> _performSearch() async {
+    print('=== 검색 디버깅 ===');
+    print('선택된 시/도: \\${_selectedRegion?.name} (code: \\${_selectedRegion?.code})');
+    print('선택된 구/시: \\${_selectedGu?.name} (code: \\${_selectedGu?.code})');
+    print('선택된 동: \\${_selectedSubRegion?.name} (code: \\${_selectedSubRegion?.code})');
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -101,25 +133,48 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
       }
       final minSalary = int.tryParse(_minSalaryController.text.replaceAll(',', ''));
       if (_selectedSubRegion!.code == 'all') {
-        // 전체 동 검색: 동별로 바로바로 추가
-        final parent = _selectedRegion!;
-        for (final sub in parent.subRegions) {
-          if (sub.code == 'all') continue;
-          var results = await _apiService.searchJobs(
-            _searchController.text.trim(),
-            sub,
-            showOnlyDaangnJobs: _showOnlyDaangnJobs,
-          );
-          // 최소금액 필터 적용
-          if (minSalary != null) {
-            results = results.where((job) {
-              final salary = parseKoreanMoney(job.salary);
-              return salary != null && salary >= minSalary;
-            }).toList();
+        // 전체 동 검색
+        if (_selectedGu != null && _selectedGu!.code != 'all') {
+          // 특정 구의 전체 동 검색
+          for (final dong in _selectedGu!.dongs) {
+            if (dong.code == 'all') continue;
+            var results = await _apiService.searchJobs(
+              _searchController.text.trim(),
+              dong,
+              showOnlyDaangnJobs: _showOnlyDaangnJobs,
+            );
+            // 최소금액 필터 적용
+            if (minSalary != null) {
+              results = results.where((job) {
+                final salary = parseKoreanMoney(job.salary);
+                return salary != null && salary >= minSalary;
+              }).toList();
+            }
+            setState(() {
+              _searchResults.addAll(results);
+            });
           }
-          setState(() {
-            _searchResults.addAll(results);
-          });
+        } else {
+          // 시/도 전체 동 검색
+          final parent = _selectedRegion!;
+          for (final sub in parent.subRegions ?? []) {
+            if (sub.code == 'all') continue;
+            var results = await _apiService.searchJobs(
+              _searchController.text.trim(),
+              sub,
+              showOnlyDaangnJobs: _showOnlyDaangnJobs,
+            );
+            // 최소금액 필터 적용
+            if (minSalary != null) {
+              results = results.where((job) {
+                final salary = parseKoreanMoney(job.salary);
+                return salary != null && salary >= minSalary;
+              }).toList();
+            }
+            setState(() {
+              _searchResults.addAll(results);
+            });
+          }
         }
         setState(() {
           _isLoading = false;
@@ -259,35 +314,62 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                             child: Text(region.name),
                           );
                         }).toList(),
-                        onChanged: (Region? newValue) {
-                          setState(() {
-                            _selectedRegion = newValue;
-                            _selectedSubRegion = newValue?.subRegions.first;
-                          });
-                        },
+                        onChanged: _onRegionChanged,
                       ),
                       const SizedBox(height: 12),
-                      // 동 선택 드롭다운
-                      DropdownButtonFormField<SubRegion>(
-                        value: _selectedSubRegion,
-                        decoration: InputDecoration(
-                          labelText: '동 선택',
-                          hintText: '검색할 동을 선택하거나 "선택 안함"으로 전체 동 검색',
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          prefixIcon: const Icon(Icons.location_on),
+                      // 구(시) 선택 드롭다운 (서울/경기 등 3단계 지역만)
+                      if (_selectedRegion?.gus != null && _selectedRegion!.gus!.isNotEmpty)
+                        Builder(
+                          builder: (context) {
+                            final noneGu = Gu(name: '선택 안함 (전체 구)', code: 'all', dongs: [SubRegion(name: '선택 안함 (전체 동)', code: 'all')]);
+                            final guList = [noneGu, ...(_selectedRegion!.gus ?? [])];
+                            return DropdownButtonFormField<Gu>(
+                              value: guList.contains(_selectedGu) ? _selectedGu : noneGu,
+                              decoration: InputDecoration(
+                                labelText: '구/시',
+                                hintText: '구/시를 선택하세요',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                prefixIcon: const Icon(Icons.apartment),
+                              ),
+                              items: guList.map((gu) {
+                                return DropdownMenuItem<Gu>(
+                                  value: gu,
+                                  child: Text(gu.name),
+                                );
+                              }).toList(),
+                              onChanged: _onGuChanged,
+                            );
+                          },
                         ),
-                        items: _selectedRegion?.subRegions.map((subRegion) {
-                          return DropdownMenuItem<SubRegion>(
-                            value: subRegion,
-                            child: Text(subRegion.name),
+                      if (_selectedRegion?.gus != null && _selectedRegion!.gus!.isNotEmpty)
+                        const SizedBox(height: 12),
+                      // 동 선택 드롭다운
+                      Builder(
+                        builder: (context) {
+                          final noneDong = SubRegion(name: '선택 안함 (전체 동)', code: 'all');
+                          final dongList = (_selectedGu?.dongs != null)
+                              ? [noneDong, ..._selectedGu!.dongs.where((d) => d.code != 'all')]
+                              : (_selectedRegion?.subRegions ?? []);
+                          return DropdownButtonFormField<SubRegion>(
+                            value: dongList.contains(_selectedSubRegion) ? _selectedSubRegion : noneDong,
+                            decoration: InputDecoration(
+                              labelText: '동 선택',
+                              hintText: '검색할 동을 선택하거나 "선택 안함"으로 전체 동 검색',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              prefixIcon: const Icon(Icons.location_on),
+                            ),
+                            items: dongList.map((subRegion) {
+                              return DropdownMenuItem<SubRegion>(
+                                value: subRegion,
+                                child: Text(subRegion.name),
+                              );
+                            }).toList(),
+                            onChanged: _onSubRegionChanged,
                           );
-                        }).toList() ?? [],
-                        onChanged: (SubRegion? newValue) {
-                          setState(() {
-                            _selectedSubRegion = newValue;
-                          });
                         },
                       ),
                     ],

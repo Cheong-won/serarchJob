@@ -14,7 +14,7 @@ class DaangnApiService {
       if (region.code == 'all' && parentRegion != null) {
         List<JobResult> allResults = [];
         Set<String> seenTitles = {};
-        for (final sub in parentRegion.subRegions) {
+        for (final sub in parentRegion.subRegions ?? []) {
           if (sub.code == 'all') continue; // "선택 안함"은 제외
           print('하위 지역 검색: ${sub.name} (${sub.code})');
           final results = await searchJobs(query, sub, showOnlyDaangnJobs: showOnlyDaangnJobs);
