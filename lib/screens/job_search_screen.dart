@@ -18,6 +18,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
   
   Set<JobResult> _searchResults = {};
   bool _isLoading = false;
+  bool _isSearchCancelled = false; // 검색 중지 플래그
   String? _errorMessage;
   
   // 지역 선택 관련
@@ -87,6 +88,14 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
     });
   }
 
+  // 검색 중지 메서드
+  void _cancelSearch() {
+    setState(() {
+      _isSearchCancelled = true;
+      _isLoading = false;
+    });
+  }
+
   int? parseKoreanMoney(String text) {
     // 1. '1만 5,000원' → '1만5000'
     String cleaned = text.replaceAll(' ', '');
@@ -116,12 +125,20 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
   }
 
   Future<void> _performSearch() async {
+    // 이미 검색 중이면 중지
+    if (_isLoading) {
+      _cancelSearch();
+      return;
+    }
+
     print('=== 검색 디버깅 ===');
     print('선택된 시/도: \\${_selectedRegion?.name} (code: \\${_selectedRegion?.code})');
     print('선택된 구/시: \\${_selectedGu?.name} (code: \\${_selectedGu?.code})');
     print('선택된 동: \\${_selectedSubRegion?.name} (code: \\${_selectedSubRegion?.code})');
+    
     setState(() {
       _isLoading = true;
+      _isSearchCancelled = false;
       _errorMessage = null;
       _searchResults = {};
     });
@@ -139,13 +156,16 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
         if (_selectedRegion!.code == 'all') {
           // 전체 지역 검색 (모든 시/도의 모든 동을 검색)
           for (final region in RegionData.regions) {
+            if (_isSearchCancelled) break; // 검색 중지 체크
             if (region.code == 'all') continue; // 전체 지역 옵션은 건너뛰기
             
             if (region.gus != null) {
               // 3단계 구조 (시/도 -> 구 -> 동)
               for (final gu in region.gus!) {
+                if (_isSearchCancelled) break; // 검색 중지 체크
                 if (gu.code == 'all') continue; // 전체 구 옵션은 건너뛰기
                 for (final dong in gu.dongs) {
+                  if (_isSearchCancelled) break; // 검색 중지 체크
                   if (dong.code == 'all') continue;
                   var results = await _apiService.searchJobs(
                     _searchController.text.trim(),
@@ -159,14 +179,18 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                       return salary != null && salary >= minSalary;
                     }).toList();
                   }
-                  setState(() {
-                    _searchResults.addAll(results);
-                  });
+                  if (!_isSearchCancelled) {
+                    setState(() {
+                      _searchResults.addAll(results);
+                    });
+                  }
                 }
+                if (_isSearchCancelled) break; // 검색 중지 체크
               }
             } else if (region.subRegions != null) {
               // 2단계 구조 (시/도 -> 동)
               for (final sub in region.subRegions!) {
+                if (_isSearchCancelled) break; // 검색 중지 체크
                 if (sub.code == 'all') continue;
                 var results = await _apiService.searchJobs(
                   _searchController.text.trim(),
@@ -180,15 +204,19 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                     return salary != null && salary >= minSalary;
                   }).toList();
                 }
-                setState(() {
-                  _searchResults.addAll(results);
-                });
+                if (!_isSearchCancelled) {
+                  setState(() {
+                    _searchResults.addAll(results);
+                  });
+                }
               }
             }
+            if (_isSearchCancelled) break; // 검색 중지 체크
           }
         } else if (_selectedGu != null && _selectedGu!.code != 'all') {
           // 특정 구의 전체 동 검색
           for (final dong in _selectedGu!.dongs) {
+            if (_isSearchCancelled) break; // 검색 중지 체크
             if (dong.code == 'all') continue;
             var results = await _apiService.searchJobs(
               _searchController.text.trim(),
@@ -202,16 +230,20 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                 return salary != null && salary >= minSalary;
               }).toList();
             }
-            setState(() {
-              _searchResults.addAll(results);
-            });
+            if (!_isSearchCancelled) {
+              setState(() {
+                _searchResults.addAll(results);
+              });
+            }
           }
         } else if (_selectedGu != null && _selectedGu!.code == 'all') {
           // 전체 구 검색 (시/도의 모든 구에 대해 검색)
           final parent = _selectedRegion!;
           for (final gu in parent.gus ?? []) {
+            if (_isSearchCancelled) break; // 검색 중지 체크
             if (gu.code == 'all') continue; // 전체 구 옵션은 건너뛰기
             for (final dong in gu.dongs) {
+              if (_isSearchCancelled) break; // 검색 중지 체크
               if (dong.code == 'all') continue;
               var results = await _apiService.searchJobs(
                 _searchController.text.trim(),
@@ -225,15 +257,19 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                   return salary != null && salary >= minSalary;
                 }).toList();
               }
-              setState(() {
-                _searchResults.addAll(results);
-              });
+              if (!_isSearchCancelled) {
+                setState(() {
+                  _searchResults.addAll(results);
+                });
+              }
             }
+            if (_isSearchCancelled) break; // 검색 중지 체크
           }
         } else {
           // 시/도 전체 동 검색 (기존 2단계 구조용)
           final parent = _selectedRegion!;
           for (final sub in parent.subRegions ?? []) {
+            if (_isSearchCancelled) break; // 검색 중지 체크
             if (sub.code == 'all') continue;
             var results = await _apiService.searchJobs(
               _searchController.text.trim(),
@@ -247,14 +283,18 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                 return salary != null && salary >= minSalary;
               }).toList();
             }
-            setState(() {
-              _searchResults.addAll(results);
-            });
+            if (!_isSearchCancelled) {
+              setState(() {
+                _searchResults.addAll(results);
+              });
+            }
           }
         }
-        setState(() {
-          _isLoading = false;
-        });
+        if (!_isSearchCancelled) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
       } else {
         // 단일 동 검색
         var results = await _apiService.searchJobs(
@@ -269,16 +309,20 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
             return salary != null && salary >= minSalary;
           }).toList();
         }
+        if (!_isSearchCancelled) {
+          setState(() {
+            _searchResults.addAll(results);
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (!_isSearchCancelled) {
         setState(() {
-          _searchResults.addAll(results);
+          _errorMessage = e.toString();
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString();
-        _isLoading = false;
-      });
     }
   }
 
@@ -326,6 +370,21 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
           backgroundColor: Colors.red,
         ),
       );
+    }
+  }
+
+  // 시간 차이로 '몇시간 전' 등 표시 함수 추가
+  String timeAgoFromDateTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final diff = now.difference(dateTime);
+    if (diff.inSeconds < 60) {
+      return '${diff.inSeconds}초 전';
+    } else if (diff.inMinutes < 60) {
+      return '${diff.inMinutes}분 전';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours}시간 전';
+    } else {
+      return '${diff.inDays}일 전';
     }
   }
 
@@ -470,18 +529,26 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: _isLoading ? null : _performSearch,
+                      onPressed: _performSearch,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
+                        backgroundColor: _isLoading ? Colors.red : null,
                       ),
                       child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                          ? const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                ),
+                                SizedBox(width: 8),
+                                Text('중지', style: TextStyle(color: Colors.white)),
+                              ],
                             )
                           : const Text('검색'),
                     ),
@@ -589,16 +656,17 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.all(16),
-                        itemCount: _searchResults.length,
+                        itemCount: _searchResults.where((r) => r.postedDate != null).length,
                         itemBuilder: (context, index) {
-                          final result = _searchResults.toList()[index];
+                          final filteredResults = _searchResults.where((r) => r.postedDate != null).toList();
+                          final result = filteredResults[index];
                           return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
+                            margin: const EdgeInsets.only(bottom: 8),
                             child: InkWell(
                               onTap: () => _launchUrl(result.url),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(8),
                               child: Padding(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(12),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
@@ -609,10 +677,12 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                                           child: Text(
                                             result.title,
                                             style: const TextStyle(
-                                              fontSize: 18,
+                                              fontSize: 16,
                                               fontWeight: FontWeight.bold,
                                               color: Colors.blue,
                                             ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
                                         const Icon(
@@ -624,133 +694,177 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                                     ),
                                     const SizedBox(height: 8),
                                     
-                                    // 회사명
-                                    if (result.company.isNotEmpty) ...[
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.business, size: 16, color: Colors.grey),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            result.company,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                    ],
-                                    
-                                    // 위치
-                                    if (result.location.isNotEmpty) ...[
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            result.location,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                    ],
-                                    
-                                    // 급여
-                                    if (result.salary.isNotEmpty) ...[
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.attach_money, size: 16, color: Colors.orange),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            result.salary,
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w500,
-                                              color: Colors.orange,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                    ],
-                                    
-                                    // 근무 일정
-                                    if (result.workSchedule.isNotEmpty) ...[
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.schedule, size: 16, color: Colors.blue),
-                                          const SizedBox(width: 4),
+                                    // 주요 정보를 가로로 배치
+                                    Row(
+                                      children: [
+                                        // 위치 (동이름)
+                                        if (result.location.isNotEmpty) ...[
                                           Expanded(
-                                            child: Text(
-                                              result.workSchedule,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                color: Colors.blue,
-                                              ),
+                                            flex: 2,
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    result.location,
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      color: Colors.grey,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                    ],
+                                        
+                                        // 급여
+                                        if (result.salary.isNotEmpty) ...[
+                                          Expanded(
+                                            flex: 2,
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.attach_money, size: 14, color: Colors.orange),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    result.salary,
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: Colors.orange,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        
+                                        // 회사명
+                                        if (result.company.isNotEmpty) ...[
+                                          Expanded(
+                                            flex: 2,
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.business, size: 14, color: Colors.grey),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    result.company,
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      color: Colors.grey,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                     
-                                    // 근무 기간
-                                    if (result.workPeriod.isNotEmpty) ...[
+                                    // 등록 시간 (몇시간 전 등)
+                                    if (result.postedDate != null) ...[
+                                      const SizedBox(height: 4),
                                       Row(
                                         children: [
-                                          const Icon(Icons.calendar_today, size: 16, color: Colors.green),
+                                          const Icon(Icons.access_time, size: 14, color: Colors.blueGrey),
                                           const SizedBox(width: 4),
                                           Text(
-                                            result.workPeriod,
+                                            timeAgoFromDateTime(result.postedDate!),
                                             style: const TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.green,
+                                              fontSize: 13,
+                                              color: Colors.blueGrey,
                                             ),
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 8),
                                     ],
                                     
-                                    // 설명
-                                    if (result.description.isNotEmpty) ...[
-                                      Text(
-                                        result.description,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.black87,
-                                        ),
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 12),
-                                    ],
+                                    const SizedBox(height: 6),
                                     
-                                    const SizedBox(height: 12),
+                                    // 근무 정보를 가로로 배치
+                                    Row(
+                                      children: [
+                                        // 근무 일정
+                                        if (result.workSchedule.isNotEmpty) ...[
+                                          Expanded(
+                                            flex: 2,
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.schedule, size: 14, color: Colors.blue),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    result.workSchedule,
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      color: Colors.blue,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                        
+                                        // 근무 기간
+                                        if (result.workPeriod.isNotEmpty) ...[
+                                          Expanded(
+                                            flex: 2,
+                                            child: Row(
+                                              children: [
+                                                const Icon(Icons.calendar_today, size: 14, color: Colors.green),
+                                                const SizedBox(width: 4),
+                                                Expanded(
+                                                  child: Text(
+                                                    result.workPeriod,
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      color: Colors.green,
+                                                    ),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                     
-                                    // 클릭 안내 메시지
+                                    const SizedBox(height: 8),
+                                    
+                                    // 클릭 안내 메시지 (작게)
                                     Container(
                                       width: double.infinity,
-                                      padding: const EdgeInsets.all(8),
+                                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
                                       decoration: BoxDecoration(
                                         color: Colors.blue.shade50,
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(6),
                                         border: Border.all(color: Colors.blue.shade200),
                                       ),
                                       child: const Row(
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Icon(Icons.phone_android, size: 16, color: Colors.blue),
+                                          Icon(Icons.phone_android, size: 14, color: Colors.blue),
                                           SizedBox(width: 4),
                                           Text(
                                             '클릭하여 당근마켓 앱에서 보기',
                                             style: TextStyle(
-                                              fontSize: 12,
+                                              fontSize: 11,
                                               color: Colors.blue,
                                               fontWeight: FontWeight.w500,
                                             ),

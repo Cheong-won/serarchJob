@@ -8,6 +8,7 @@ class JobResult {
   final String description;
   final String url;
   final DateTime? postedDate;
+  final String timeAgoText;
 
   JobResult({
     required this.title,
@@ -19,6 +20,7 @@ class JobResult {
     required this.description,
     required this.url,
     this.postedDate,
+    this.timeAgoText = '',
   });
 
   factory JobResult.fromJson(Map<String, dynamic> json) {
@@ -34,6 +36,7 @@ class JobResult {
       postedDate: json['postedDate'] != null 
           ? DateTime.tryParse(json['postedDate']) 
           : null,
+      timeAgoText: json['timeAgoText'] ?? '',
     );
   }
 
@@ -48,6 +51,7 @@ class JobResult {
       'description': description,
       'url': url,
       'postedDate': postedDate?.toIso8601String(),
+      'timeAgoText': timeAgoText,
     };
   }
 
@@ -61,8 +65,10 @@ class JobResult {
       identical(this, other) ||
       other is JobResult &&
           runtimeType == other.runtimeType &&
-          title == other.title;
+          title == other.title &&
+          company == other.company &&
+          location == other.location;
 
   @override
-  int get hashCode => title.hashCode;
+  int get hashCode => Object.hash(title, company, location);
 }

@@ -134,7 +134,7 @@ class DaangnApiService {
             final titleElement1 = linkElement.querySelector('span[class*="abyzch1"]');
             if (titleElement1 != null) {
               title = _extractText(titleElement1)?.trim() ?? '';
-              print('방법 1 (abyzch1): "$title"');
+              print('방법 1 (abyzch1): "$title"');              
             }
                     
                     
@@ -142,23 +142,41 @@ class DaangnApiService {
             // 회사명과 위치 추출 (_1pwsqmm0 클래스의 첫 번째 span)
             String company = '';
             String location = '';
+            String timeAgoText = '';
+            DateTime? postedDate;
             print('\n--- 회사명/위치 추출 ---');
             
             final companyLocationElement = linkElement.querySelector('._1pwsqmm0');
             if (companyLocationElement != null) {
               final spans = companyLocationElement.querySelectorAll('span');
-              print('회사/위치 요소에서 찾은 span 개수: \\${spans.length}');
               if (spans.isNotEmpty) {
                 // 회사명: 첫 번째 span
                 company = _extractText(spans.first)?.trim() ?? '';
-                print('추출된 회사명: "\\$company"');
-                // 동정보: 두 번째 _1pwsqmmd span의 두 번째 자식 span
-                final dongSpans = companyLocationElement.querySelectorAll('span._1pwsqmmd');
-                if (dongSpans.isNotEmpty) {
-                  final innerSpans = dongSpans[0].querySelectorAll('span');
-                  if (innerSpans.length > 1) {
-                    location = _extractText(innerSpans[1])?.trim() ?? '';
-                    print('동정보(location): "\\$location"');
+              }
+              final dongSpans = companyLocationElement.querySelectorAll('span._1pwsqmmd');
+              // 동정보
+              if (dongSpans.isNotEmpty) {
+                final innerSpans = dongSpans[0].querySelectorAll('span');
+                if (innerSpans.length > 1) {
+                  location = _extractText(innerSpans[1])?.trim() ?? '';
+                }
+              }
+              // 등록시간
+              if (dongSpans.length > 1) {
+                final timeTag = dongSpans[1].querySelector('time');
+                if (timeTag != null) {
+                  timeAgoText = _extractText(timeTag)?.trim() ?? '';
+                  final datetimeAttr = timeTag.attributes['datetime'];;
+                  if (datetimeAttr != null) {
+                    postedDate = DateTime.tryParse(datetimeAttr);
+                    if (postedDate != null) {
+                      final now = DateTime.now();
+                      final diff = now.difference(postedDate!);
+                      if (diff.inDays >= 1) {
+                        // 1일 이상은 건너뜀
+                        continue;
+                      }
+                    }
                   }
                 }
               }
@@ -191,8 +209,6 @@ class DaangnApiService {
               }
             }
             
-          
-            
             // 결과가 유효한 경우에만 추가
             if (title.isNotEmpty) {
               // 이웃알바만 보기 옵션이 활성화된 경우 필터링
@@ -203,16 +219,7 @@ class DaangnApiService {
               if (shouldInclude) {
                 // 설명은 제목과 회사 정보를 조합
                 String description = '';
-                if (company.isNotEmpty) {
-                  description = '$company에서 모집하는 $title';
-                } else {
-                  description = title;
-                }
-                
-                if (location.isNotEmpty) {
-                  description += ' ($location)';
-                }
-                
+         
                 results.add(JobResult(
                   title: title,
                   company: company,
@@ -222,7 +229,8 @@ class DaangnApiService {
                   workPeriod: '',
                   description: description,
                   url: url,
-                  postedDate: DateTime.now(), // 실제로는 HTML에서 추출
+                  postedDate: postedDate,
+                  timeAgoText: timeAgoText,
                 ));
                 
                 print('✅ 결과 추가됨: $title - $company - $salary');
@@ -263,5 +271,26 @@ class DaangnApiService {
     }
     
     return element.text?.trim();
+  }
+
+  // 제목에서 "이웃알바에서 .....(동이름)" 형태 제거
+  String _cleanTitle(String title) {
+    // "이웃알바에서"로 시작하는 경우
+    if (title.startsWith('이웃알바에서 ')) {
+      // "이웃알바에서 " 부분 제거
+      title = title.substring('이웃알바에서 '.length);
+    }
+    
+    // 마지막에 "(동이름)" 형태가 있는 경우 제거
+    final lastParenthesisIndex = title.lastIndexOf('(');
+    if (lastParenthesisIndex != -1) {
+      final lastClosingParenthesisIndex = title.lastIndexOf(')');
+      if (lastClosingParenthesisIndex > lastParenthesisIndex) {
+        // 괄호 부분 제거
+        title = title.substring(0, lastParenthesisIndex).trim();
+      }
+    }
+    
+    return title;
   }
 } 
