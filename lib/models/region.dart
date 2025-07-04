@@ -41,10 +41,24 @@ class SubRegion {
 
 // 지역 코드 데이터
 class RegionData {
-  static final List<Region> regions = [
+  static final List<Region> regions = [   
+     Region(
+      name: '선택 안함 (전체 시/도)',
+      code: 'all',
+      gus: [
+        Gu(
+          name: '선택 안함 (전체 구)',
+          code: 'all',
+          dongs: [
+            SubRegion(name: '선택 안함 (전체 동)', code: 'all'),
+          ],
+        ),
+      ],
+      // subRegions: null, // 또는 생략
+    ),
 
     Region(
-      name: '서울특별시',
+      name: '서울특별시-',
       code: 'seoul',
       gus: [
         Gu(
@@ -210,6 +224,23 @@ class RegionData {
             SubRegion(name: '신천동', code: '6187'),
             SubRegion(name: '오륜동', code: '413'),
             SubRegion(name: '풍납동', code: '6189'),
+          ],
+        ),
+        Gu(
+          name: '구로구',
+          code: 'guro',
+          dongs: [
+            SubRegion(name: '구로동', code: '6064'),
+            SubRegion(name: '신도림동', code: '279'),
+            SubRegion(name: '개봉동', code: '6062'),
+            SubRegion(name: '고척동', code: '6063'),
+            SubRegion(name: '오류동', code: '6066'),
+            SubRegion(name: '항동', code: '6069'),
+            SubRegion(name: '천왕동', code: '6068'),
+            SubRegion(name: '가리봉동', code: '285'),
+            SubRegion(name: '온수동', code: '6067'),
+            SubRegion(name: '궁동', code: '6065'),
+            SubRegion(name: '수궁동', code: '293'),
           ],
         ),
       ],
