@@ -16,6 +16,7 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _isLoading = false;
   String? _errorMessage;
   bool _isFilterExpanded = false;
+  bool _isSearchCancelled = false;
 
   @override
   void dispose() {
@@ -40,9 +41,22 @@ class _SearchScreenState extends State<SearchScreen> {
     try {
       final results = await _apiService.search(query);
       setState(() {
-        _searchResults = results;
-        _isLoading = false;
+        _searchResults.addAll(results);
       });
+
+      if (!_isSearchCancelled) {
+        setState(() {
+          _isLoading = false;
+          List<SearchResult> sortedResults = _searchResults.toList()
+            ..sort((a, b) {
+              if (a.postedDate == null && b.postedDate == null) return 0;
+              if (a.postedDate == null) return 1;
+              if (b.postedDate == null) return -1;
+              return b.postedDate!.compareTo(a.postedDate!);
+            });
+          _searchResults = sortedResults.toSet();
+        });
+      }
     } catch (e) {
       setState(() {
         _errorMessage = '검색 중 오류가 발생했습니다: $e';

@@ -189,15 +189,6 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                   if (!_isSearchCancelled) {
                     setState(() {
                       _searchResults.addAll(results);
-                      // 검색 완료 후 최신순 정렬
-                      List<JobResult> sortedResults = _searchResults.toList()
-                        ..sort((a, b) {
-                          if (a.postedDate == null && b.postedDate == null) return 0;
-                          if (a.postedDate == null) return 1;
-                          if (b.postedDate == null) return -1;
-                          return b.postedDate!.compareTo(a.postedDate!);
-                        });
-                      _searchResults = _searchResults.toSet();
                     });
                   }
                 }
@@ -223,15 +214,6 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                 if (!_isSearchCancelled) {
                   setState(() {
                     _searchResults.addAll(results);
-                    // 검색 완료 후 최신순 정렬
-                    List<JobResult> sortedResults = _searchResults.toList()
-                      ..sort((a, b) {
-                        if (a.postedDate == null && b.postedDate == null) return 0;
-                        if (a.postedDate == null) return 1;
-                        if (b.postedDate == null) return -1;
-                        return b.postedDate!.compareTo(a.postedDate!);
-                      });
-                    _searchResults = _searchResults.toSet();
                   });
                 }
               }
@@ -258,15 +240,6 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
             if (!_isSearchCancelled) {
               setState(() {
                 _searchResults.addAll(results);
-                // 검색 완료 후 최신순 정렬
-                List<JobResult> sortedResults = _searchResults.toList()
-                  ..sort((a, b) {
-                    if (a.postedDate == null && b.postedDate == null) return 0;
-                    if (a.postedDate == null) return 1;
-                    if (b.postedDate == null) return -1;
-                    return b.postedDate!.compareTo(a.postedDate!);
-                  });
-                _searchResults = _searchResults.toSet();
               });
             }
           }
@@ -294,15 +267,6 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
               if (!_isSearchCancelled) {
                 setState(() {
                   _searchResults.addAll(results);
-                  // 검색 완료 후 최신순 정렬
-                  List<JobResult> sortedResults = _searchResults.toList()
-                    ..sort((a, b) {
-                      if (a.postedDate == null && b.postedDate == null) return 0;
-                      if (a.postedDate == null) return 1;
-                      if (b.postedDate == null) return -1;
-                      return b.postedDate!.compareTo(a.postedDate!);
-                    });
-                  _searchResults = _searchResults.toSet();
                 });
               }
             }
@@ -329,15 +293,6 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
             if (!_isSearchCancelled) {
               setState(() {
                 _searchResults.addAll(results);
-                // 검색 완료 후 최신순 정렬
-                List<JobResult> sortedResults = _searchResults.toList()
-                  ..sort((a, b) {
-                    if (a.postedDate == null && b.postedDate == null) return 0;
-                    if (a.postedDate == null) return 1;
-                    if (b.postedDate == null) return -1;
-                    return b.postedDate!.compareTo(a.postedDate!);
-                  });
-                _searchResults = _searchResults.toSet();
               });
             }
           }
@@ -345,6 +300,15 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
         if (!_isSearchCancelled) {
           setState(() {
             _isLoading = false;
+            // 여기서 한 번만 정렬
+            List<JobResult> sortedResults = _searchResults.toList()
+              ..sort((a, b) {
+                if (a.postedDate == null && b.postedDate == null) return 0;
+                if (a.postedDate == null) return 1;
+                if (b.postedDate == null) return -1;
+                return b.postedDate!.compareTo(a.postedDate!);
+              });
+            _searchResults = sortedResults.toSet();
           });
         }
       } else {
@@ -364,16 +328,6 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
         if (!_isSearchCancelled) {
           setState(() {
             _searchResults.addAll(results);
-            // 검색 완료 후 최신순 정렬
-            List<JobResult> sortedResults = _searchResults.toList()
-              ..sort((a, b) {
-                if (a.postedDate == null && b.postedDate == null) return 0;
-                if (a.postedDate == null) return 1;
-                if (b.postedDate == null) return -1;
-                return b.postedDate!.compareTo(a.postedDate!);
-              });
-            _searchResults = _searchResults.toSet();
-            _isLoading = false;
           });
         }
       }
