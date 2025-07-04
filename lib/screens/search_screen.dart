@@ -15,6 +15,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<SearchResult> _searchResults = [];
   bool _isLoading = false;
   String? _errorMessage;
+  bool _isFilterExpanded = false;
 
   @override
   void dispose() {
@@ -136,39 +137,20 @@ class _SearchScreenState extends State<SearchScreen> {
                           ],
                         ),
                       )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _searchResults.length,
-                        itemBuilder: (context, index) {
-                          final result = _searchResults[index];
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            child: ListTile(
-                              title: Text(
-                                result.title,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 4),
-                                  Text(result.content),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'URL: ${result.url}',
-                                    style: TextStyle(
-                                      color: Colors.blue.shade600,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              isThreeLine: true,
-                            ),
-                          );
+                    : ExpansionPanelList(
+                        expansionCallback: (panelIndex, isExpanded) {
+                          setState(() {
+                            _isFilterExpanded = !_isFilterExpanded;
+                          });
                         },
+                        children: [
+                          ExpansionPanel(
+                            headerBuilder: (context, isExpanded) => ListTile(
+                              title: Text('검색 및 필터 옵션'),
+                            ),
+                            body: ...
+                          ),
+                        ],
                       ),
           ),
         ],
