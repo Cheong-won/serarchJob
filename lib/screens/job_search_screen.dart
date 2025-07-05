@@ -46,7 +46,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
     );
     if (_selectedRegion!.gus != null && _selectedRegion!.gus!.isNotEmpty) {
       // 성북구, 중랑구, 노원구, 강북구를 기본 선택
-      final selectedGuNames = ['성북구', '중랑구', '노원구', '강북구'];
+      final selectedGuNames = ['성북구', '중랑구', '노원구', '강북구','중구'];
       _selectedGus = _selectedRegion!.gus!.where((gu) => selectedGuNames.contains(gu.name)).toList();
       
       // 동 선택은 '선택 안함'으로
@@ -135,55 +135,58 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
               title: const Text('구/시 선택'),
               content: SizedBox(
                 width: double.maxFinite,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 전체 선택/해제 버튼
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () {
-                              setDialogState(() {
-                                _selectedGus = [Gu(name: '선택 안함 (전체 구)', code: 'all', dongs: [SubRegion(name: '선택 안함 (전체 동)', code: 'all')]), ...(_selectedRegion!.gus ?? [])];
-                              });
-                            },
-                            child: const Text('전체 선택'),
+                height: MediaQuery.of(context).size.height * 0.6, // 화면 높이의 60%로 제한
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // 전체 선택/해제 버튼
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                setDialogState(() {
+                                  _selectedGus = [Gu(name: '선택 안함 (전체 구)', code: 'all', dongs: [SubRegion(name: '선택 안함 (전체 동)', code: 'all')]), ...(_selectedRegion!.gus ?? [])];
+                                });
+                              },
+                              child: const Text('전체 선택'),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () {
-                              setDialogState(() {
-                                _selectedGus = [];
-                              });
-                            },
-                            child: const Text('전체 해제'),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: ElevatedButton(
+                              onPressed: () {
+                                setDialogState(() {
+                                  _selectedGus = [];
+                                });
+                              },
+                              child: const Text('전체 해제'),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    // 개별 구 체크박스
-                    ...(_selectedRegion!.gus ?? []).map((gu) => CheckboxListTile(
-                      title: Text(gu.name),
-                      value: _selectedGus.contains(gu),
-                      onChanged: (value) {
-                        setDialogState(() {
-                          if (value == true) {
-                            _selectedGus.removeWhere((g) => g.code == 'all');
-                            if (!_selectedGus.contains(gu)) {
-                              _selectedGus.add(gu);
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // 개별 구 체크박스
+                      ...(_selectedRegion!.gus ?? []).map((gu) => CheckboxListTile(
+                        title: Text(gu.name),
+                        value: _selectedGus.contains(gu),
+                        onChanged: (value) {
+                          setDialogState(() {
+                            if (value == true) {
+                              _selectedGus.removeWhere((g) => g.code == 'all');
+                              if (!_selectedGus.contains(gu)) {
+                                _selectedGus.add(gu);
+                              }
+                            } else {
+                              _selectedGus.remove(gu);
                             }
-                          } else {
-                            _selectedGus.remove(gu);
-                          }
-                        });
-                      },
-                      dense: true,
-                    )),
-                  ],
+                          });
+                        },
+                        dense: true,
+                      )),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -540,8 +543,16 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('당근마켓 알바 검색'),
-          backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+          title: const Text(
+            'boss 검색기',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+          backgroundColor: Colors.orange,
+          elevation: 2,
+          centerTitle: true,
         ),
         body: Column(
           children: [
@@ -581,7 +592,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                           // 지역 선택 영역
                           Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.all(6),
+                            padding: const EdgeInsets.all(5),
                             decoration: BoxDecoration(
                               color: Colors.blue.shade50,
                               borderRadius: BorderRadius.circular(8),
@@ -598,7 +609,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                                     color: Colors.blue,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 6),
                                 // 시/도 선택 드롭다운
                                 DropdownButtonFormField<Region>(
                                   value: _selectedRegion,
@@ -609,7 +620,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     prefixIcon: const Icon(Icons.location_city, size: 20),
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
                                     isDense: true,
                                   ),
                                   items: RegionData.regions.map((region) {
@@ -620,7 +631,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                                   }).toList(),
                                   onChanged: _onRegionChanged,
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 12),
                                 // 구(시) 선택 드롭다운 (다중 선택 가능)
                                 if (_selectedRegion?.gus != null && _selectedRegion!.gus!.isNotEmpty)
                                   DropdownButtonFormField<String>(
@@ -632,7 +643,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       prefixIcon: const Icon(Icons.apartment, size: 20),
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
                                       isDense: true,
                                     ),
                                     items: [
@@ -662,7 +673,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                                     },
                                   ),
                                 if (_selectedRegion?.gus != null && _selectedRegion!.gus!.isNotEmpty)
-                                  const SizedBox(height: 4),
+                                  const SizedBox(height: 12),
                                 // 동 선택 드롭다운
                                 Builder(
                                   builder: (context) {
@@ -689,7 +700,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         prefixIcon: const Icon(Icons.location_on, size: 20),
-                                        contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                        contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
                                         isDense: true,
                                       ),
                                       items: dongList.map((subRegion) {
@@ -705,7 +716,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 16),
                           // 검색 입력 영역
                           Row(
                             children: [
@@ -718,7 +729,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     prefixIcon: const Icon(Icons.search, size: 20),
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
                                     isDense: true,
                                   ),
                                   onSubmitted: (_) => _performSearch(),
@@ -728,7 +739,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                               ElevatedButton(
                                 onPressed: _performSearch,
                                 style: ElevatedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(8),
                                   ),
@@ -751,7 +762,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 12),
                           // 필터 옵션
                           Row(
                             children: [
@@ -790,7 +801,7 @@ class _JobSearchScreenState extends State<JobSearchScreen> {
                                       borderRadius: BorderRadius.circular(6),
                                     ),
                                     isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 3, horizontal: 10),
                                   ),
                                   items: _minSalaryOptions.map((salary) {
                                     return DropdownMenuItem<int>(
