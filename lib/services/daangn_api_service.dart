@@ -63,10 +63,18 @@ class DaangnApiService {
       print('응답 헤더: ${response.headers}');
       
       if (response.statusCode == 200) {
-        final body = utf8.decode(response.bodyBytes);
+        // ✅ UTF-8 강제 디코딩 + fallback 처리
+        String body;
+        try {
+          body = utf8.decode(response.bodyBytes, allowMalformed: true);
+        } catch (e) {
+          // 혹시 모를 디코딩 오류 발생 시 latin1 → UTF-8 변환 시도
+          body = const Latin1Decoder().convert(response.bodyBytes);
+        }
+
         print('응답 본문 크기: ${body.length} 문자');
         print('응답 본문 미리보기: ${body.substring(0, body.length > 500 ? 500 : body.length)}...');
-        
+
         final results = _parseJobResults(body, query, showOnlyDaangnJobs);
         print('=== API 검색 완료 ===');
         print('최종 결과 개수: ${results.length}');
