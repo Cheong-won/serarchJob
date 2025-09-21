@@ -79,18 +79,32 @@ class DaangnApiService {
       if (response.statusCode == 200) {
         String body;
 
-        if (response.headers['content-encoding'] == 'br') {
-          // Brotli 압축 해제
-          final decodedBytes = brotli.decode(response.bodyBytes);
-          body = utf8.decode(decodedBytes, allowMalformed: true);
-          print("Brotli 해제 후 본문 길이: ${body.length}");
-        } else {
-          // 기본 UTF-8 처리 + fallback
-          try {
+        try {
+          final encoding = response.headers['content-encoding'] ?? '';
+          print("👉 Content-Encoding: $encoding");
+
+          if (encoding.contains('br')) {
+            // Brotli 압축 해제
+            try {
+              final decodedBytes = brotli.decode(response.bodyBytes);
+              body = utf8.decode(decodedBytes, allowMalformed: true);
+              print("✅ Brotli 해제 성공");
+            } catch (e) {
+              print("⚠️ Brotli 해제 실패, fallback: $e");
+              body = utf8.decode(response.bodyBytes, allowMalformed: true);
+            }
+          } else if (encoding.contains('gzip')) {
+            // http 패키지가 gzip은 자동 처리해줄 때가 많음
             body = utf8.decode(response.bodyBytes, allowMalformed: true);
-          } catch (e) {
-            body = const Latin1Decoder().convert(response.bodyBytes);
+            print("✅ gzip 또는 자동 해제된 데이터");
+          } else {
+            // 평문 처리
+            body = utf8.decode(response.bodyBytes, allowMalformed: true);
+            print("✅ 평문 UTF-8 처리");
           }
+        } catch (e) {
+          print("❌ decodeResponse 최종 실패: $e");
+          body = utf8.decode(response.bodyBytes, allowMalformed: true);
         }
 
         print('응답 본문 크기: ${body.length} 문자');
